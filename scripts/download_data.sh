@@ -8,9 +8,9 @@
 #SBATCH --mem-per-cpu=20G       
 #SBATCH --time=0-1:00              
 
-module load anaconda
+# module load anaconda
 
-. ~/.bashrc
+# . ~/.bashrc
 
 eid=${1}
 
@@ -18,11 +18,11 @@ echo $TMPDIR
 
 conda activate decoding
 
-cd /burg/stats/users/yz4123/neural_decoding
+cd /home/lenny-aharon/neural_decoding
 
 python src/download_data.py \
-       --eid $eid \
-       --base_path /burg/stats/users/yz4123/Downloads
+       --eid 9b528ad0-4599-4a55-9148-96cc1d93fb24 \
+       --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity
 
 conda deactivate
 
