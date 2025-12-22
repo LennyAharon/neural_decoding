@@ -3,6 +3,11 @@
 import os
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 os.environ["TORCH_USE_CUDA_DSA"] = "1"
+# Prevent Ray from auto-initializing and disable dashboard
+os.environ["RAY_DISABLE_IMPORT_WARNING"] = "1"
+os.environ["RAY_AUTO_INIT"] = "0"
+os.environ["RAY_DASHBOARD_ENABLED"] = "0"
+os.environ["RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE"] = "1"
 import argparse
 import numpy as np
 import pandas as pd
@@ -10,15 +15,30 @@ from pathlib import Path
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.linear_model import Ridge, LogisticRegression
 import torch
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch import Trainer
-from ray import tune
-from ray.train.lightning import (
-    RayDDPStrategy,
-    RayLightningEnvironment,
-    RayTrainReportCallback,
-    prepare_trainer,
-)
+
+# Conditional imports for non-linear models
+try:
+    from lightning.pytorch.callbacks import ModelCheckpoint
+    from lightning.pytorch import Trainer
+    from ray import tune
+    from ray.train.lightning import (
+        RayDDPStrategy,
+        RayLightningEnvironment,
+        RayTrainReportCallback,
+        prepare_trainer,
+    )
+    LIGHTNING_AVAILABLE = True
+except ImportError:
+    LIGHTNING_AVAILABLE = False
+    # These will only be used if model_class != "linear"
+    ModelCheckpoint = None
+    Trainer = None
+    RayDDPStrategy = None
+    RayLightningEnvironment = None
+    RayTrainReportCallback = None
+    prepare_trainer = None
+    tune = None
+
 from utils.data_loader_utils import SingleSessionDataModule
 from models.decoders import ReducedRankDecoder, MLPDecoder, LSTMDecoder, SeanMLPDecoder
 from utils.eval_utils import eval_model
@@ -29,7 +49,9 @@ from utils.config_utils import config_from_kwargs, update_config
 BINSIZE = 0.02
 LENGTH = 2.
 CLASSIFICATION = ["choice"]
-REGRESSION = ["wheel-speed", "whisker-motion-energy", "prior", "finger_vel_dim_0", "finger_vel_dim_1"]
+REGRESSION = ["wheel-speed", "whisker-motion-energy", "prior", "finger_vel_dim_0", "finger_vel_dim_1", 
+              "lightning-pose-left-pawL-speed", "lightning-pose-right-pawL-speed",
+              "lightning-pose-left-pawR-speed", "lightning-pose-right-pawR-speed"]
 
 """
 -----------
@@ -47,6 +69,9 @@ ap.add_argument("--search", action="store_true")
 ap.add_argument("--use_nlb", action="store_true")
 ap.add_argument("--bin_size", type=int, default=5)
 ap.add_argument("--fold_idx", type=int, default=0)
+# ap.add_argument("--search", action="store_true", 
+#                 help="Enable hyperparameter tuning with Ray Tune") # I added this command for parameter tuning for the RRR ( it was just missing the command I didn't add anything else )
+
 args = ap.parse_args()
 
 OUTPUT_SIZE_LOOKUP = {
@@ -57,6 +82,10 @@ OUTPUT_SIZE_LOOKUP = {
     "pupil-diameter": int(LENGTH/BINSIZE),
     "finger_vel_dim_0": int(0.6/(args.bin_size/1000)),
     "finger_vel_dim_1": int(0.6/(args.bin_size/1000)),
+    "lightning-pose-left-pawL-speed": int(LENGTH/BINSIZE),
+    "lightning-pose-right-pawL-speed": int(LENGTH/BINSIZE),
+    "lightning-pose-left-pawR-speed": int(LENGTH/BINSIZE),
+    "lightning-pose-right-pawR-speed": int(LENGTH/BINSIZE),
 }
 
 
@@ -86,6 +115,14 @@ os.makedirs(ckpt_path, exist_ok=True)
 
 model_class = args.method
 
+# Check if lightning is needed
+if model_class != "linear" and not LIGHTNING_AVAILABLE:
+    raise ImportError(
+        f"PyTorch Lightning is required for '{model_class}' models. "
+        f"Please install it with: pip install lightning\n"
+        f"Or use --method linear for sklearn-based models."
+    )
+
 print(f"Decode {args.target} from session: {args.eid}")
 
 
@@ -111,6 +148,103 @@ search_space["data"]["fold_idx"] = args.fold_idx
 
 # set up for hyperparameter sweep    
 if args.search:
+    # Initialize Ray early to prevent auto-initialization issues
+    # Note: Ray may have auto-initialized when 'from ray import tune' was imported
+    import ray
+    import torch
+    import time
+    import subprocess
+    
+    # Always shutdown any existing Ray instance first (may be broken from auto-init)
+    if ray.is_initialized():
+        try:
+            print("Shutting down any existing Ray instance (may be from auto-init)...")
+            ray.shutdown()
+            time.sleep(3)  # Give it time to fully shutdown
+        except Exception as e:
+            print(f"Warning during Ray shutdown: {e}")
+    
+    # Force kill any remaining Ray processes to ensure clean state
+    print("Cleaning up any remaining Ray processes...")
+    subprocess.run(["pkill", "-9", "ray"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+    subprocess.run(["pkill", "-9", "raylet"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+    time.sleep(2)
+    
+    # Verify Ray is shutdown
+    if ray.is_initialized():
+        print("Warning: Ray still appears initialized, forcing shutdown...")
+        try:
+            ray.shutdown()
+        except:
+            pass
+        time.sleep(1)
+    
+    if config.tuner.use_gpu and torch.cuda.is_available():
+        num_gpus = torch.cuda.device_count()
+        print(f"Initializing Ray with {num_gpus} GPU(s)...")
+        
+        # Try to initialize Ray
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                ray.init(
+                    num_gpus=num_gpus,
+                    ignore_reinit_error=True,
+                    include_dashboard=False,
+                )
+                # Wait and verify resources are available
+                time.sleep(2)
+                cluster_resources = ray.cluster_resources()
+                print(f"Ray initialized with resources: {cluster_resources}")
+                
+                if "GPU" in cluster_resources and cluster_resources.get("GPU", 0) > 0:
+                    # Test that Ray is actually functional
+                    try:
+                        test_obj = ray.put([1, 2, 3])
+                        ray.get(test_obj)
+                        print(f"✓ Ray ready with {cluster_resources.get('GPU', 0)} GPU(s) and functional")
+                        break
+                    except Exception as test_e:
+                        print(f"Ray initialized but not functional: {test_e}")
+                        if attempt < max_retries - 1:
+                            ray.shutdown()
+                            time.sleep(2)
+                            subprocess.run(["pkill", "-9", "ray"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                            subprocess.run(["pkill", "-9", "raylet"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                            time.sleep(2)
+                        else:
+                            raise RuntimeError(f"Ray is not functional: {test_e}")
+                else:
+                    print(f"Attempt {attempt + 1}: GPU resources not available, retrying...")
+                    if attempt < max_retries - 1:
+                        ray.shutdown()
+                        time.sleep(2)
+                        subprocess.run(["pkill", "-9", "ray"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                        subprocess.run(["pkill", "-9", "raylet"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                        time.sleep(2)
+                    else:
+                        raise RuntimeError("Failed to initialize Ray with GPU after multiple attempts")
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"Attempt {attempt + 1} failed: {e}, retrying...")
+                    try:
+                        ray.shutdown()
+                    except:
+                        pass
+                    subprocess.run(["pkill", "-9", "ray"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                    subprocess.run(["pkill", "-9", "raylet"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                    time.sleep(2)
+                else:
+                    raise RuntimeError(f"Failed to initialize Ray with GPU: {e}")
+    else:
+        print("Initializing Ray for CPU...")
+        ray.init(
+            ignore_reinit_error=True,
+            include_dashboard=False,
+        )
+        time.sleep(1)
+        cluster_resources = ray.cluster_resources()
+        print(f"Ray initialized for CPU with resources: {cluster_resources}")
 
     search_space["optimizer"]["lr"] = tune.loguniform(1e-4, 1e-2)
     search_space["optimizer"]["weight_decay"] = tune.loguniform(1e-3, 1.)
@@ -322,3 +456,23 @@ if not args.use_nlb:
     np.save(save_path/f'{args.eid}.npy', res_dict)
 else:
     np.save(save_path/f'{args.eid}_binSize{args.bin_size}_fold{args.fold_idx}.npy', res_dict)
+
+
+# command to decode as session:
+'''
+python src/decode_single_session.py \
+    --eid 15b69921-d471-4ded-8814-2adad954bcd8 \
+    --target lightning-pose-right-pawR-speed \
+    --method linear \
+    --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
+    --region all
+'''
+
+# the method can be linear / recuced rank / mlp 
+# eids_test = [
+#     '15b69921-d471-4ded-8814-2adad954bcd8',  # vertical bright strip right
+#     '15763234-d21e-491f-a01b-1238eb96d389',  # dark
+#     'aad23144-0e52-4eac-80c5-c4ee2decb198',  # wire by tongue
+#     '9b528ad0-4599-4a55-9148-96cc1d93fb24',  # vertical bright band left
+#     '5c0c560e-9e1f-45e9-b66e-e4ee7855be84',  # vertical bright band left, bright spot right, back paws
+# ]

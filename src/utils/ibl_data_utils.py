@@ -16,6 +16,10 @@ from brainbox.population.decode import get_spike_counts_in_bins
 
 DYNAMIC_VARS = [
     "wheel-speed", "whisker-motion-energy", "body-motion-energy", 
+    "lightning-pose-right-pawR-speed",
+    "lightning-pose-left-pawR-speed", 
+    "lightning-pose-right-pawL-speed",
+    "lightning-pose-left-pawL-speed",
     "lightning-pose-right-pawR-x", "lightning-pose-right-pawR-y",
     "lightning-pose-left-pawR-x", "lightning-pose-left-pawR-y",
     "lightning-pose-right-pawL-x", "lightning-pose-right-pawL-y",
@@ -263,9 +267,8 @@ def _load_lightning_pose_from_csv(one, eid, camera_view, paw_name, coord, base_p
     """
     Helper function to load lightning pose data from CSV with correct timestamp mapping.
     
-    The CSV file contains pose predictions for frames starting at session time 0 (60 FPS).
-    The camera recording may start later (e.g., at 5.691 seconds).
-    We need to find which CSV frame corresponds to the first camera frame and map from there.
+    The CSV file contains pose predictions for frames, and the timestamps are loaded
+    from numpy files that contain the exact timestamps when each frame was acquired.
     
     Parameters:
     -----------
@@ -289,95 +292,54 @@ def _load_lightning_pose_from_csv(one, eid, camera_view, paw_name, coord, base_p
     try:
         # Load CSV file
         pred_file = os.path.join(base_path, f"_iblrig_{camera_view}.downsampled.{eid}.csv")
-        df = pd.read_csv(pred_file, header=[0,1,2], index_col=0)
-        
-        # CSV frame indices (0, 1, 2, ...) represent frames starting from session time 0
-        # At 60 FPS: CSV frame i = i / 60.0 seconds (absolute session time)
-        csv_fps = 60.0
-        csv_frame_indices = df.index.to_numpy()
-        n_csv_frames = len(df)
-        
-        # Calculate absolute session times for each CSV frame
-        csv_times_absolute = csv_frame_indices / csv_fps
-        
-        # Load camera timestamps from IBL
-        sess_loader = SessionLoader(one, eid=eid)
-        
-        # Map camera view to view name for load_motion_energy
-        view_map = {"leftCamera": "left", "rightCamera": "right"}
-        view_name = view_map[camera_view]
-        
-        sess_loader.load_motion_energy(views=[view_name])
-        camera_times = sess_loader.motion_energy[camera_view]["times"].to_numpy()
-        
-        # HARDCODED: All cameras are 60 FPS
-        # Downsample camera timestamps to 60 Hz to match CSV FPS
-        camera_duration = camera_times[-1] - camera_times[0]
-        target_n_samples = int(camera_duration * csv_fps) + 1
-        
-        # Downsample to evenly spaced 60 Hz timestamps
-        camera_times = np.linspace(camera_times[0], camera_times[-1], target_n_samples)
-        
-        # Find the first camera timestamp (when camera recording starts)
-        camera_start_time = camera_times[0]
-        
-        # VERIFICATION: Check if both cameras start at similar times
-        # Load the other camera to compare
-        other_view_name = "right" if view_name == "left" else "left"
-        try:
-            sess_loader.load_motion_energy(views=[other_view_name])
-            other_camera_times = sess_loader.motion_energy[f"{other_view_name}Camera"]["times"].to_numpy()
-            other_camera_start = other_camera_times[0]
-            time_diff = abs(camera_start_time - other_camera_start)
-            if time_diff > 0.1:  # More than 100ms difference
-                print(f"Warning: {camera_view} starts at {camera_start_time:.3f}s, "
-                      f"but {other_view_name}Camera starts at {other_camera_start:.3f}s "
-                      f"(diff: {time_diff:.3f}s). This may indicate a data issue.")
-        except:
-            pass  # If we can't load the other camera, continue anyway
-        
-        # Find which CSV frame corresponds to when camera recording starts
-        # CSV frame at time camera_start_time = camera_start_time * csv_fps
-        csv_start_frame = int(camera_start_time * csv_fps)
-        
-        # Only use CSV frames from when camera recording starts
-        if csv_start_frame >= n_csv_frames:
-            print(f"Error: Camera starts at {camera_start_time:.3f}s (frame {csv_start_frame}) "
-                  f"but CSV only has {n_csv_frames} frames")
+        if not os.path.exists(pred_file):
+            print(f"Error: CSV file not found: {pred_file}")
             return {"times": None, "values": None, "skip": True}
         
-        # Map CSV frames to camera timestamps
-        # OPTIMIZED: Use searchsorted for fast vectorized lookup
-        valid_csv_frames = csv_frame_indices[csv_start_frame:]
-        valid_csv_times = csv_times_absolute[csv_start_frame:]
+        df = pd.read_csv(pred_file, header=[0,1,2], index_col=0)
+        n_csv_frames = len(df)
+        print(f"Loaded {n_csv_frames} frames from CSV file")
         
-        # Use searchsorted for fast vectorized lookup
-        indices = np.searchsorted(camera_times, valid_csv_times, side='left')
-        indices = np.clip(indices, 0, len(camera_times) - 1)
         
-        # Check if left neighbor is closer
-        left_indices = np.maximum(0, indices - 1)
-        left_diffs = np.abs(camera_times[left_indices] - valid_csv_times)
-        right_diffs = np.abs(camera_times[indices] - valid_csv_times)
-        closer_mask = left_diffs < right_diffs
-        final_indices = np.where(closer_mask, left_indices, indices)
+        # Load timestamps from numpy file
+        # Note: Both leftCamera and rightCamera use the same timestamp file (leftCamera)
+        timestamp_file = f"/media/lenny-aharon/T7/ibl-mouse/timestamps/_ibl_leftCamera.times.{eid}.npy"
+        if not os.path.exists(timestamp_file):
+            print(f"Error: Timestamp file not found: {timestamp_file}")
+            return {"times": None, "values": None, "skip": True}
+        print(f"Loading timestamp file: {timestamp_file}")
         
-        times = camera_times[final_indices]
+        frame_times = np.load(timestamp_file)
+        n_timestamps = len(frame_times)
         
-        # Extract paw data for valid frames
+        # Ensure CSV frames and timestamps have matching lengths
+        if n_csv_frames != n_timestamps:
+            min_len = min(n_csv_frames, n_timestamps)
+            print(f"Warning: CSV has {n_csv_frames} frames but timestamps have {n_timestamps} entries. "
+                  f"Using first {min_len} entries for alignment.")
+            frame_times = frame_times[:min_len]
+            # We'll also truncate the CSV data to match
+        else:
+            min_len = n_csv_frames
+        
+        # Extract paw data
         idx = pd.IndexSlice
         paw_df = df.loc[:, idx[:, paw_name, coord]]
         paw = paw_df.iloc[:, 0].to_numpy()
-        paw = paw[csv_start_frame:]
         
-        # Ensure alignment
-        min_len = min(len(times), len(paw))
-        times = times[:min_len]
+        # Truncate to match timestamp length if needed
+        if len(paw) > min_len:
+            paw = paw[:min_len]
+        elif len(paw) < min_len:
+            min_len = len(paw)
+            frame_times = frame_times[:min_len]
+        
+        # Ensure final alignment
+        times = frame_times[:min_len]
         paw = paw[:min_len]
         
-        print(f"Mapped CSV frames {csv_start_frame} to {csv_start_frame + min_len - 1} "
-              f"(session times {csv_times_absolute[csv_start_frame]:.3f}s to "
-              f"{csv_times_absolute[csv_start_frame + min_len - 1]:.3f}s) to camera timestamps")
+        print(f"Loaded {min_len} frames for {camera_view}-{paw_name}-{coord} "
+              f"(time range: {times[0]:.3f}s to {times[-1]:.3f}s)")
         
         return {
             "times": times,
@@ -386,6 +348,72 @@ def _load_lightning_pose_from_csv(one, eid, camera_view, paw_name, coord, base_p
         }
     except Exception as e:
         print(f"Error loading lightning pose {camera_view}-{paw_name}-{coord}: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"times": None, "values": None, "skip": True}
+
+def _load_lightning_pose_speed_from_csv(one, eid, camera_view, paw_name, base_path):
+    """
+    Helper function to compute paw speed from lightning pose x,y coordinates.
+    
+    Speed is computed as the Euclidean distance between consecutive frames divided by time difference.
+    
+    Parameters:
+    -----------
+    one : ONE object
+        ONE API object
+    eid : str
+        Experiment ID
+    camera_view : str
+        "leftCamera" or "rightCamera"
+    paw_name : str
+        "pawL" or "pawR"
+    base_path : str
+        Base path to CSV files
+        
+    Returns:
+    --------
+    dict with keys: 'times', 'values', 'skip'
+    """
+    try:
+        # Load x and y coordinates
+        x_dict = _load_lightning_pose_from_csv(one, eid, camera_view, paw_name, "x", base_path)
+        y_dict = _load_lightning_pose_from_csv(one, eid, camera_view, paw_name, "y", base_path)
+        
+        if x_dict["skip"] or y_dict["skip"]:
+            return {"times": None, "values": None, "skip": True}
+        
+        x_times, x_vals = x_dict["times"], x_dict["values"]
+        y_times, y_vals = y_dict["times"], y_dict["values"]
+        
+        # Ensure both have same length and times
+        if len(x_vals) != len(y_vals) or not np.allclose(x_times, y_times):
+            print(f"Error: x,y data mismatch for {camera_view}-{paw_name}")
+            return {"times": None, "values": None, "skip": True}
+        
+        # Compute speed: sqrt(dx^2 + dy^2) / dt
+        dx = x_vals[1:] - x_vals[:-1]  # pixels
+        dy = y_vals[1:] - y_vals[:-1]  # pixels  
+        dt = x_times[1:] - x_times[:-1]  # seconds
+        
+        # Compute Euclidean distance
+        distances = np.sqrt(dx**2 + dy**2)  # pixels
+        
+        # Speed in pixels per second
+        speeds = distances / dt
+        
+        # Use MIDPOINT of time intervals for better alignment
+        speed_times = (x_times[:-1] + x_times[1:]) / 2
+        
+        return {
+            "times": speed_times,  # Midpoint of each interval
+            "values": speeds,
+            "skip": False,
+        }
+    except Exception as e:
+        print(f"Error computing speed for lightning pose {camera_view}-{paw_name}: {e}")
+        import traceback
+        traceback.print_exc()
         return {"times": None, "values": None, "skip": True}
 
 def load_target_behavior(one, eid, target):
@@ -485,6 +513,22 @@ def load_target_behavior(one, eid, target):
                 "values": dm1,
                 "skip": False,
             }
+        elif target == "lightning-pose-right-pawR-speed":
+            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+            beh_dict = _load_lightning_pose_speed_from_csv(one, eid, "rightCamera", "pawR", base_path)
+        
+        elif target == "lightning-pose-left-pawR-speed":
+            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+            beh_dict = _load_lightning_pose_speed_from_csv(one, eid, "leftCamera", "pawR", base_path)
+        
+        elif target == "lightning-pose-right-pawL-speed":
+            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+            beh_dict = _load_lightning_pose_speed_from_csv(one, eid, "rightCamera", "pawL", base_path)
+        
+        elif target == "lightning-pose-left-pawL-speed":
+            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+            beh_dict = _load_lightning_pose_speed_from_csv(one, eid, "leftCamera", "pawL", base_path)
+
         elif target == "lightning-pose-right-pawR-x":
             base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
             beh_dict = _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawR", "x", base_path)
@@ -546,146 +590,7 @@ def load_target_behavior(one, eid, target):
         #         "values": paw, # paw position values
         #         "skip": False,
         #     }
-        # elif target == "lightning-pose-right-pawR-y":
-        #     pred_file = os.path.join("/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new", f"_iblrig_rightCamera.downsampled.{eid}.csv")
-        #     df = pd.read_csv(pred_file, header=[0,1,2], index_col=0)
-
-        #     sess_loader = SessionLoader(one, eid=eid)
-        #     sess_loader.load_motion_energy(views=["right"])  # or "left"
-        #     camera_times = sess_loader.motion_energy["rightCamera"]["times"].to_numpy()
-        #     times = camera_times[:len(df)]  # CORRECT - direct mapping
-        #     idx = pd.IndexSlice
-        #     paw_df = df.loc[:, idx[:, 'pawR', 'y']]
-        #     paw = paw_df.iloc[:, 0].to_numpy()
-
-        #     beh_dict = {
-        #         "times": times, # time of paw position
-        #         "values": paw, # paw position values
-        #         "skip": False,
-        #     }
-        # elif target == "lightning-pose-left-pawR-x":
-        #     pred_file = os.path.join("/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new", f"_iblrig_leftCamera.downsampled.{eid}.csv")
-        #     df = pd.read_csv(pred_file, header=[0,1,2], index_col=0)
-
-        #     sess_loader = SessionLoader(one, eid=eid)
-        #     sess_loader.load_motion_energy(views=["left"])  # or "left"
-        #     camera_times = sess_loader.motion_energy["leftCamera"]["times"].to_numpy()
-        #     times = camera_times[:len(df)]  # CORRECT - direct mapping
-        #     idx = pd.IndexSlice
-        #     paw_df = df.loc[:, idx[:, 'pawR', 'x']]
-        #     paw = paw_df.iloc[:, 0].to_numpy()
-
-        #     beh_dict = {
-        #         "times": times, # time of paw position
-        #         "values": paw, # paw position values
-        #         "skip": False,
-        #     }
-        # elif target == "lightning-pose-left-pawR-y":
-        #     pred_file = os.path.join("/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new", f"_iblrig_leftCamera.downsampled.{eid}.csv")
-        #     df = pd.read_csv(pred_file, header=[0,1,2], index_col=0)
-
-        #     sess_loader = SessionLoader(one, eid=eid)
-        #     sess_loader.load_motion_energy(views=["left"])  # or "left"
-        #     camera_times = sess_loader.motion_energy["leftCamera"]["times"].to_numpy()
-        #     times = camera_times[:len(df)]  # CORRECT - direct mapping
-        #     idx = pd.IndexSlice
-        #     paw_df = df.loc[:, idx[:, 'pawR', 'y']]
-        #     paw = paw_df.iloc[:, 0].to_numpy()
-
-        #     beh_dict = {
-        #         "times": times, # time of paw position
-        #         "values": paw, # paw position values
-        #         "skip": False,
-        #     }
         
-        # elif target == "lightning-pose-right-pawL-x":
-        #     pred_file = os.path.join("/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new", f"_iblrig_rightCamera.downsampled.{eid}.csv")
-        #     df = pd.read_csv(pred_file, header=[0,1,2], index_col=0)
-
-        #     sess_loader = SessionLoader(one, eid=eid)
-        #     sess_loader.load_motion_energy(views=["right"])  # or "left"
-        #     camera_times = sess_loader.motion_energy["rightCamera"]["times"].to_numpy()
-        #     times = camera_times[:len(df)]  # CORRECT - direct mapping
-        #     idx = pd.IndexSlice
-        #     paw_df = df.loc[:, idx[:, 'pawL', 'x']]
-        #     paw = paw_df.iloc[:, 0].to_numpy()
-
-        #     beh_dict = {
-        #         "times": times, # time of paw position
-        #         "values": paw, # paw position values
-        #         "skip": False,
-        #     }
-        
-        # elif target == "lightning-pose-right-pawL-y":
-        #     pred_file = os.path.join("/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new", f"_iblrig_rightCamera.downsampled.{eid}.csv")
-        #     df = pd.read_csv(pred_file, header=[0,1,2], index_col=0)
-
-        #     sess_loader = SessionLoader(one, eid=eid)
-        #     sess_loader.load_motion_energy(views=["right"])  # or "left"
-        #     camera_times = sess_loader.motion_energy["rightCamera"]["times"].to_numpy()
-        #     times = camera_times[:len(df)]  # CORRECT - direct mapping
-        #     idx = pd.IndexSlice
-        #     paw_df = df.loc[:, idx[:, 'pawL', 'y']]
-        #     paw = paw_df.iloc[:, 0].to_numpy()
-
-        #     beh_dict = {
-        #         "times": times, # time of paw position
-        #         "values": paw, # paw position values
-        #         "skip": False,
-        #     }
-        
-        # elif target == "lightning-pose-left-pawL-x":
-        #     pred_file = os.path.join("/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new", f"_iblrig_leftCamera.downsampled.{eid}.csv")
-        #     df = pd.read_csv(pred_file, header=[0,1,2], index_col=0)
-
-        #     sess_loader = SessionLoader(one, eid=eid)
-        #     sess_loader.load_motion_energy(views=["left"])  # or "left"
-        #     camera_times = sess_loader.motion_energy["leftCamera"]["times"].to_numpy()
-        #     times = camera_times[:len(df)]  # CORRECT - direct mapping
-        #     idx = pd.IndexSlice
-        #     paw_df = df.loc[:, idx[:, 'pawL', 'x']]
-        #     paw = paw_df.iloc[:, 0].to_numpy()
-
-        #     beh_dict = {
-        #         "times": times, # time of paw position
-        #         "values": paw, # paw position values
-        #         "skip": False,
-        #     }
-        
-        # elif target == "lightning-pose-left-pawL-y":
-        #     pred_file = os.path.join("/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new", f"_iblrig_leftCamera.downsampled.{eid}.csv")
-        #     df = pd.read_csv(pred_file, header=[0,1,2], index_col=0)
-
-        #     sess_loader = SessionLoader(one, eid=eid)
-        #     sess_loader.load_motion_energy(views=["left"])  # or "left"
-        #     camera_times = sess_loader.motion_energy["leftCamera"]["times"].to_numpy()
-        #     times = camera_times[:len(df)]  # CORRECT - direct mapping
-        #     idx = pd.IndexSlice
-        #     paw_df = df.loc[:, idx[:, 'pawL', 'y']]
-        #     paw = paw_df.iloc[:, 0].to_numpy()
-
-        #     beh_dict = {
-        #         "times": times, # time of paw position
-        #         "values": paw, # paw position values
-        #         "skip": False,
-        #     }
-            
-        # elif target == "lightning-pose-right-paw-y":
-        #     lp_right = one.load_object(eid, f"rightCamera", attribute=["lightningPose", "times"])
-        #     dm1 = np.fabs(
-        #         lp_right["lightningPose"]["pawL_x"] - \
-        #         lp_right["lightningPose"]["PawR_x"]
-        #     )
-        #     dm2 = np.fabs(
-        #         lp_right["lightningPose"]["pupil_top_r_y"] - \
-        #         lp_right["lightningPose"]["pupil_bottom_r_y"]
-        #     )
-        #     assert (np.allclose(dm1, dm2))
-        #     beh_dict = {
-        #         "times": lp_right["times"],
-        #         "values": dm1,
-        #         "skip": False,
-        #     }
         else:
             raise NotImplementedError
     except BaseException as e:
@@ -815,6 +720,10 @@ def load_anytime_behaviors(one, eid, n_workers=os.cpu_count()):
         "lightning-pose-right-pawL-y",
         "lightning-pose-left-pawL-x",
         "lightning-pose-left-pawL-y",
+        "lightning-pose-right-pawR-speed",
+        "lightning-pose-left-pawR-speed", 
+        "lightning-pose-right-pawL-speed",
+        "lightning-pose-left-pawL-speed",
         
         # "wheel-position", 
         # "wheel-velocity", 
@@ -1022,14 +931,10 @@ def align_data(
         "wheel-speed", 
         "whisker-motion-energy",
         "body-motion-energy",
-        "lightning-pose-left-pawL-x",
-        "lightning-pose-left-pawL-y",
-        "lightning-pose-right-pawL-x",
-        "lightning-pose-right-pawL-y",
-        "lightning-pose-left-pawR-x",
-        "lightning-pose-left-pawR-y",
-        "lightning-pose-right-pawR-x",
-        "lightning-pose-right-pawR-y",
+        "lightning-pose-left-pawL-speed",
+        "lightning-pose-right-pawL-speed",
+        "lightning-pose-left-pawR-speed",
+        "lightning-pose-right-pawR-speed",
     ], 
     trials_mask=None,
     nan_thresh=0.3,

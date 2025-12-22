@@ -40,11 +40,15 @@ params = {
     "fr_thresh": 0.5
 }
 
+# beh_names = ['choice', 'reward', 'block', 'wheel-speed', 'whisker-motion-energy',
+#             'lightning-pose-right-pawR-x', 'lightning-pose-right-pawR-y',
+#             'lightning-pose-left-pawR-x', 'lightning-pose-left-pawR-y',
+#             'lightning-pose-right-pawL-x', 'lightning-pose-right-pawL-y',
+#             'lightning-pose-left-pawL-x', 'lightning-pose-left-pawL-y']
+
 beh_names = ['choice', 'reward', 'block', 'wheel-speed', 'whisker-motion-energy',
-            'lightning-pose-right-pawR-x', 'lightning-pose-right-pawR-y',
-            'lightning-pose-left-pawR-x', 'lightning-pose-left-pawR-y',
-            'lightning-pose-right-pawL-x', 'lightning-pose-right-pawL-y',
-            'lightning-pose-left-pawL-x', 'lightning-pose-left-pawL-y']
+            'lightning-pose-right-pawR-speed', 'lightning-pose-left-pawR-speed',  # ← Speed targets
+            'lightning-pose-right-pawL-speed', 'lightning-pose-left-pawL-speed']
 
 DYNAMIC_VARS = list(filter(lambda x: x not in ["choice", "reward", "block"], beh_names))
 

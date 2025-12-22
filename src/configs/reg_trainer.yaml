@@ -7,7 +7,7 @@ dirs:
   output_dir: results
 
 training:
-  num_epochs: 500 # 300 # 2000
+  num_epochs: 4000 # 300 # 2000 # was 2000 # currently 2000 and 0.01 is the best with 3 temporal rank 
   batch_size: 32  # 8
 
   device: gpu
@@ -32,7 +32,7 @@ data:
   num_workers: 1
 
 optimizer:
-  lr: 0.01
+  lr: 0.01  # was 0.01
   scheduler: cosine  # step/cosine/linear
   weight_decay: 1.
 
