@@ -461,8 +461,8 @@ else:
 # command to decode as session:
 '''
 python src/decode_single_session.py \
-    --eid 15b69921-d471-4ded-8814-2adad954bcd8 \
-    --target lightning-pose-right-pawR-speed \
+    --eid 5c0c560e-9e1f-45e9-b66e-e4ee7855be84 \
+    --target lightning-pose-right-pawL-speed \
     --method linear \
     --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
     --region all
