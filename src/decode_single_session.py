@@ -69,8 +69,10 @@ ap.add_argument("--search", action="store_true")
 ap.add_argument("--use_nlb", action="store_true")
 ap.add_argument("--bin_size", type=int, default=5)
 ap.add_argument("--fold_idx", type=int, default=0)
-# ap.add_argument("--search", action="store_true", 
-#                 help="Enable hyperparameter tuning with Ray Tune") # I added this command for parameter tuning for the RRR ( it was just missing the command I didn't add anything else )
+ap.add_argument("--model_name", type=str, default=None,
+                help="Name of the pose model for loading pose-specific data. "
+                     "If provided, loads pose data from pose_aligned/{model_name}/{eid}/ "
+                     "and saves results to results/{eid}/{target}/{model_name}/{method}/")
 
 args = ap.parse_args()
 
@@ -108,8 +110,29 @@ else:
 set_seed(config.seed)
 
 config["dirs"]["data_dir"] = Path(args.base_path)/config.dirs.data_dir
-save_path = Path(args.base_path)/config.dirs.output_dir/args.eid/args.target/args.method/args.region
-ckpt_path = Path(args.base_path)/config.dirs.checkpoint_dir/args.eid/args.target/args.method/args.region 
+
+# Determine if this is a pose target that needs model_name
+POSE_TARGETS = [
+    "lightning-pose-left-pawL-speed", "lightning-pose-right-pawL-speed",
+    "lightning-pose-left-pawR-speed", "lightning-pose-right-pawR-speed"
+]
+is_pose_target = args.target in POSE_TARGETS
+
+# Create save paths - include model_name for pose targets
+if is_pose_target and args.model_name:
+    # For pose targets: results/{eid}/{target}/{model_name}/{method}/{region}/
+    save_path = Path(args.base_path)/config.dirs.output_dir/args.eid/args.target/args.model_name/args.method/args.region
+    ckpt_path = Path(args.base_path)/config.dirs.checkpoint_dir/args.eid/args.target/args.model_name/args.method/args.region
+elif is_pose_target and not args.model_name:
+    print(f"WARNING: Decoding pose target '{args.target}' without --model_name. "
+          "Consider providing --model_name to organize results by pose model.")
+    save_path = Path(args.base_path)/config.dirs.output_dir/args.eid/args.target/args.method/args.region
+    ckpt_path = Path(args.base_path)/config.dirs.checkpoint_dir/args.eid/args.target/args.method/args.region
+else:
+    # For non-pose targets: standard path
+    save_path = Path(args.base_path)/config.dirs.output_dir/args.eid/args.target/args.method/args.region
+    ckpt_path = Path(args.base_path)/config.dirs.checkpoint_dir/args.eid/args.target/args.method/args.region
+
 os.makedirs(save_path, exist_ok=True)
 os.makedirs(ckpt_path, exist_ok=True)
 
@@ -145,6 +168,8 @@ search_space["training"]["device"] = torch.device(
 search_space["data"]["use_nlb"] = True if args.use_nlb else False
 search_space["data"]["bin_size"] = args.bin_size
 search_space["data"]["fold_idx"] = args.fold_idx
+# Add pose_model_name to config for loading pose-specific data
+search_space["pose_model_name"] = args.model_name if is_pose_target else None
 
 # set up for hyperparameter sweep    
 if args.search:
@@ -458,15 +483,30 @@ else:
     np.save(save_path/f'{args.eid}_binSize{args.bin_size}_fold{args.fold_idx}.npy', res_dict)
 
 
-# command to decode as session:
+# command to decode a session:
 '''
+# For non-pose targets (wheel-speed, whisker-motion-energy, choice, etc.):
+python src/decode_single_session.py \
+    --eid 5c0c560e-9e1f-45e9-b66e-e4ee7855be84 \
+    --target wheel-speed \
+    --method linear \
+    --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
+    --region all
+
+# For pose targets (lightning-pose-*-speed), use --model_name to specify the pose model:
 python src/decode_single_session.py \
     --eid 5c0c560e-9e1f-45e9-b66e-e4ee7855be84 \
     --target lightning-pose-right-pawL-speed \
     --method linear \
     --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
+    --model_name MVT_patch_masking_0 \
     --region all
+
+# Results are saved to:
+# - Non-pose: {base_path}/results/{eid}/{target}/{method}/{region}/
+# - Pose: {base_path}/results/{eid}/{target}/{model_name}/{method}/{region}/
 '''
+
 
 # the method can be linear / recuced rank / mlp 
 # eids_test = [
@@ -476,3 +516,4 @@ python src/decode_single_session.py \
 #     '9b528ad0-4599-4a55-9148-96cc1d93fb24',  # vertical bright band left
 #     '5c0c560e-9e1f-45e9-b66e-e4ee7855be84',  # vertical bright band left, bright spot right, back paws
 # ]
+

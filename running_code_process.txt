@@ -1,0 +1,49 @@
+'''
+
+# Step 1: Download common data (now requires --pose_model_path for filtering)
+# Step 2: Process pose data for each model
+# step 3: Decoding single session
+
+python src/download_common_data.py \
+    --eid 5c0c560e-9e1f-45e9-b66e-e4ee7855be84 \
+    --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
+    --pose_model_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new
+
+
+python src/process_pose_data.py \
+    --eid 5c0c560e-9e1f-45e9-b66e-e4ee7855be84 \
+    --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
+    --pose_model_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_multiview_resnet50/supervised_200_0/videos_new \
+    --model_name resnet50_0
+
+
+python src/decode_single_session.py \
+    --eid 5c0c560e-9e1f-45e9-b66e-e4ee7855be84 \
+    --target lightning-pose-right-pawR-speed \
+    --method linear \
+    --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
+    --model_name resnet50_0 \
+    --region all
+
+'''
+
+# eids_test = [
+#     '15b69921-d471-4ded-8814-2adad954bcd8',  # vertical bright strip right
+#     '15763234-d21e-491f-a01b-1238eb96d389',  # dark
+#     'aad23144-0e52-4eac-80c5-c4ee2decb198',  # wire by tongue
+#     '9b528ad0-4599-4a55-9148-96cc1d93fb24',  # vertical bright band left
+#     '5c0c560e-9e1f-45e9-b66e-e4ee7855be84',  # vertical bright band left, bright spot right, back paws
+# ]
+
+
+--pose_model_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new \
+--pose_model_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_multiview_resnet50/supervised_200_0/videos_new \
+
+
+decoding wheel speed 
+python src/decode_single_session.py \
+    --eid 15b69921-d471-4ded-8814-2adad954bcd8 \
+    --target wheel-speed \
+    --method linear \
+    --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
+    --region all

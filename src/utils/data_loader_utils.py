@@ -14,6 +14,14 @@ from scipy.ndimage import gaussian_filter1d
 
 seed = 42
 
+# Pose behavior names that can be loaded from model-specific directories
+POSE_BEH_NAMES = [
+    "lightning-pose-left-pawL-speed",
+    "lightning-pose-right-pawL-speed",
+    "lightning-pose-left-pawR-speed",
+    "lightning-pose-right-pawR-speed",
+]
+
 # ---------
 # Helpers
 # ---------
@@ -70,6 +78,7 @@ class SingleSessionDataset(Dataset):
         use_nlb=False,
         bin_size=5,
         fold_idx=0,
+        pose_model_name=None,  # NEW: Optional model name for pose data
     ):
         """Load and preprocess single-session datasets.
             
@@ -82,7 +91,10 @@ class SingleSessionDataset(Dataset):
                 'reg': regression for continuous behavior.
             split: data partition; options = ['train', 'val', 'test'].
             region: region name to be loaded, e.g., 'LP', 'CA1'.
-            load_local: whether load cached data locally or remotely from Hugging Face. 
+            load_local: whether load cached data locally or remotely from Hugging Face.
+            pose_model_name: (Optional) Name of the pose model for loading pose-specific data.
+                             If provided and beh_name is a pose behavior, loads from 
+                             pose_aligned/{pose_model_name}/{eid}/ instead of the main dataset.
         """
         if not use_nlb:
             if load_local:
@@ -94,7 +106,9 @@ class SingleSessionDataset(Dataset):
                 try:
                     # if val exists, load pre-partitioned validation set
                     self.spike_data = get_binned_spikes(dataset[split])
-                    self.behavior = np.array(dataset[split][beh_name])
+                    self.behavior = self._load_behavior(
+                        dataset, split, beh_name, data_dir, eid, pose_model_name
+                    )
                 except:
                     # if not, partition training data into train and val
                     tmp = dataset[split].train_test_split(test_size=0.1, seed=seed)
@@ -102,10 +116,33 @@ class SingleSessionDataset(Dataset):
                     self.behavior = np.array(tmp["test"][beh_name])
             else:
                 self.spike_data = get_binned_spikes(dataset[split])
-                self.behavior = np.array(dataset[split][beh_name])
+                self.behavior = self._load_behavior(
+                    dataset, split, beh_name, data_dir, eid, pose_model_name
+                )
 
             _, means, stds = standardize_spike_data(get_binned_spikes(dataset["train"]))
             self.spike_data, _, _ = standardize_spike_data(self.spike_data, means, stds)
+            
+            # Filter out trials with NaN behavior data (especially important for pose targets)
+            if beh_name in POSE_BEH_NAMES and pose_model_name is not None:
+                # Check for NaN rows (trials where all or any values are NaN)
+                if len(self.behavior.shape) == 1:
+                    valid_mask = ~np.isnan(self.behavior)
+                else:
+                    # For time-series behavior, check if any timepoint is NaN
+                    valid_mask = ~np.any(np.isnan(self.behavior), axis=1)
+                
+                n_total = len(valid_mask)
+                n_valid = np.sum(valid_mask)
+                n_filtered = n_total - n_valid
+                
+                if n_filtered > 0:
+                    if split == "train":  # Only print once
+                        print(f"Filtering {n_filtered}/{n_total} trials with NaN pose data "
+                              f"({n_valid} valid trials remain)")
+                    
+                    self.spike_data = self.spike_data[valid_mask]
+                    self.behavior = self.behavior[valid_mask]
             
             self.sessions = np.array([eid] * len(self.spike_data))
             self.neuron_regions = np.array(dataset[split]["cluster_regions"])[0]
@@ -129,9 +166,12 @@ class SingleSessionDataset(Dataset):
             elif target == "reg":
                 pass
 
+            # Handle any remaining NaNs (for non-pose targets or edge cases)
             if np.isnan(self.behavior).sum() != 0:
                 self.behavior[np.isnan(self.behavior)] = np.nanmean(self.behavior)
-                print(f"{beh_name} in session {eid} contains NaNs; interpolate with trial-average.")
+                # Only warn if this is unexpected (not a pose target that should have been filtered)
+                if beh_name not in POSE_BEH_NAMES:
+                    print(f"{beh_name} in session {eid} contains NaNs; interpolate with trial-average.")
 
             if target == "reg" and beh_name == "prior":
                 self.behavior = self.behavior.reshape(-1,1)
@@ -165,6 +205,33 @@ class SingleSessionDataset(Dataset):
             self.sessions = np.array([eid] * self.n_trials)
             self.regions = np.array(["all"] * self.n_trials)
             
+    def _load_behavior(self, dataset, split, beh_name, data_dir, eid, pose_model_name):
+        """Load behavior data, optionally from pose-model-specific directory.
+        
+        If pose_model_name is provided and beh_name is a pose behavior,
+        loads from pose_aligned/{pose_model_name}/{eid}/ directory.
+        Otherwise, loads from the main dataset.
+        """
+        # Check if this is a pose behavior and we have a model name
+        if pose_model_name is not None and beh_name in POSE_BEH_NAMES:
+            pose_dir = Path(data_dir).parent / "pose_aligned" / pose_model_name / eid
+            pose_file = pose_dir / f"{split}_pose.npy"
+            
+            if pose_file.exists():
+                pose_data = np.load(pose_file, allow_pickle=True).item()
+                if beh_name in pose_data:
+                    # Only print once per session (on first split)
+                    if split == "train":
+                        print(f"Loading {beh_name} from pose model: {pose_model_name}")
+                    return pose_data[beh_name]
+                else:
+                    print(f"Warning: {beh_name} not found in pose data for model {pose_model_name}")
+            else:
+                print(f"Warning: Pose file not found: {pose_file}")
+        
+        # Default: load from main dataset
+        return np.array(dataset[split][beh_name])
+
     def __len__(self):
         return self.n_trials
 
@@ -191,12 +258,15 @@ class SingleSessionDataModule(LightningDataModule):
         self.use_nlb = config["data"]["use_nlb"]
         self.bin_size = config["data"]["bin_size"]
         self.fold_idx = config["data"]["fold_idx"]
+        # NEW: Optional pose model name for loading pose-specific data
+        self.pose_model_name = config.get("pose_model_name", None)
 
     def update_config(self):
         self.val = SingleSessionDataset(
             self.data_dir, self.eid, self.beh_name, self.target, 
             self.device, "val", self.region, self.load_local, 
-            use_nlb=self.use_nlb, bin_size=self.bin_size, fold_idx=self.fold_idx
+            use_nlb=self.use_nlb, bin_size=self.bin_size, fold_idx=self.fold_idx,
+            pose_model_name=self.pose_model_name
         )
         self.config.update({
             "n_units": self.val.n_units, 
@@ -210,17 +280,20 @@ class SingleSessionDataModule(LightningDataModule):
         self.train = SingleSessionDataset(
             self.data_dir, self.eid, self.beh_name, self.target, 
             self.device, "train", self.region, self.load_local, 
-            use_nlb=self.use_nlb, bin_size=self.bin_size, fold_idx=self.fold_idx
+            use_nlb=self.use_nlb, bin_size=self.bin_size, fold_idx=self.fold_idx,
+            pose_model_name=self.pose_model_name
         )
         self.val = SingleSessionDataset(
             self.data_dir, self.eid, self.beh_name, self.target, 
             self.device, "val", self.region, self.load_local, 
-            use_nlb=self.use_nlb, bin_size=self.bin_size, fold_idx=self.fold_idx
+            use_nlb=self.use_nlb, bin_size=self.bin_size, fold_idx=self.fold_idx,
+            pose_model_name=self.pose_model_name
         )
         self.test = SingleSessionDataset(
             self.data_dir, self.eid, self.beh_name, self.target, 
             self.device, "test", self.region, self.load_local, 
-            use_nlb=self.use_nlb, bin_size=self.bin_size, fold_idx=self.fold_idx
+            use_nlb=self.use_nlb, bin_size=self.bin_size, fold_idx=self.fold_idx,
+            pose_model_name=self.pose_model_name
         )
 
     def train_dataloader(self):

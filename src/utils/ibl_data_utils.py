@@ -20,10 +20,6 @@ DYNAMIC_VARS = [
     "lightning-pose-left-pawR-speed", 
     "lightning-pose-right-pawL-speed",
     "lightning-pose-left-pawL-speed",
-    "lightning-pose-right-pawR-x", "lightning-pose-right-pawR-y",
-    "lightning-pose-left-pawR-x", "lightning-pose-left-pawR-y",
-    "lightning-pose-right-pawL-x", "lightning-pose-right-pawL-y",
-    "lightning-pose-left-pawL-x", "lightning-pose-left-pawL-y",
 ]
 
 def globalize(func):
@@ -529,67 +525,38 @@ def load_target_behavior(one, eid, target):
             base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
             beh_dict = _load_lightning_pose_speed_from_csv(one, eid, "leftCamera", "pawL", base_path)
 
-        elif target == "lightning-pose-right-pawR-x":
-            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
-            beh_dict = _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawR", "x", base_path)
-        
-        elif target == "lightning-pose-right-pawR-y":
-            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
-            beh_dict = _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawR", "y", base_path)
-        
-        elif target == "lightning-pose-left-pawR-x":
-            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
-            beh_dict = _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawR", "x", base_path)
-        
-        elif target == "lightning-pose-left-pawR-y":
-            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
-            beh_dict = _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawR", "y", base_path)
-        
-        elif target == "lightning-pose-right-pawL-x":
-            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
-            beh_dict = _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawL", "x", base_path)
-        
-        elif target == "lightning-pose-right-pawL-y":
-            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
-            beh_dict = _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawL", "y", base_path)
-        
-        elif target == "lightning-pose-left-pawL-x":
-            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
-            beh_dict = _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawL", "x", base_path)
-        
-        elif target == "lightning-pose-left-pawL-y":
-            base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
-            beh_dict = _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawL", "y", base_path)
         # elif target == "lightning-pose-right-pawR-x":
-        #     # lp_right = one.load_object(eid, f"rightCamera", attribute=["lightningPose", "times"])
-        #     # I need to prextract poses and put it here.
-        #     # convert the frame number to time and can load it using panda move to numpy to get the times.
-        #     pred_file = os.path.join("/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new", f"_iblrig_rightCamera.downsampled.{eid}.csv")
-        #     df = pd.read_csv(pred_file, header=[0,1,2], index_col=0)
-        #     print(f" the data frame is {df.head()}")
-        #     # times = df.index.to_numpy() / 60  # 200 fps
-
-        #     sess_loader = SessionLoader(one, eid=eid)
-        #     # Step 1: Load using view name "right"
-        #     sess_loader.load_motion_energy(views=["right"])  # or "left"
-        #     # Step 2: 
-        #     camera_times = sess_loader.motion_energy["rightCamera"]["times"].to_numpy()
-        #     times = camera_times[:len(df)]  # CORRECT - direct mapping
-
-        #     # Create an index slice object for cleaner code
-        #     idx = pd.IndexSlice
-        #     # 1. Select all rows (:) and use idx[:, 'pawR', 'x'] to slice the columns.
-        #     #    The colon (:) means 'select all' for the first level ('scorer').
-        #     #    This returns a DataFrame (even if only one column is selected).
-        #     paw_df = df.loc[:, idx[:, 'pawR', 'x']]
-        #     # 2. Select the single resulting column as a Series (iloc[:, 0]) and convert it to NumPy.
-        #     paw = paw_df.iloc[:, 0].to_numpy()
-        #     print(f" the paw data is {paw[:10]}")
-        #     beh_dict = {
-        #         "times": times, # time of paw position
-        #         "values": paw, # paw position values
-        #         "skip": False,
-        #     }
+        #     base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+        #     beh_dict = _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawR", "x", base_path)
+        
+        # elif target == "lightning-pose-right-pawR-y":
+        #     base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+        #     beh_dict = _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawR", "y", base_path)
+        
+        # elif target == "lightning-pose-left-pawR-x":
+        #     base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+        #     beh_dict = _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawR", "x", base_path)
+        
+        # elif target == "lightning-pose-left-pawR-y":
+        #     base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+        #     beh_dict = _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawR", "y", base_path)
+        
+        # elif target == "lightning-pose-right-pawL-x":
+        #     base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+        #     beh_dict = _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawL", "x", base_path)
+        
+        # elif target == "lightning-pose-right-pawL-y":
+        #     base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+        #     beh_dict = _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawL", "y", base_path)
+        
+        # elif target == "lightning-pose-left-pawL-x":
+        #     base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+        #     beh_dict = _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawL", "x", base_path)
+        
+        # elif target == "lightning-pose-left-pawL-y":
+        #     base_path = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new"
+        #     beh_dict = _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawL", "y", base_path)
+        
         
         else:
             raise NotImplementedError
@@ -623,6 +590,11 @@ def get_behavior_per_interval(
         assert intervals is not None, \
             "Require intervals to segment the recording into chunks including trials and non-trials."
         interval_begs, interval_ends = intervals.T
+        # Calculate interval_len from time_window or from intervals
+        if "time_window" in kwargs:
+            interval_len = kwargs["time_window"][1] - kwargs["time_window"][0]
+        else:
+            interval_len = interval_ends[0] - interval_begs[0]
 
     n_intervals = len(interval_begs)
 
@@ -919,6 +891,23 @@ def standardize_lfp_data(lfp_data, means=None, stds=None):
     return std_lfp_data, means, stds
 
 
+COMMON_BEH_NAMES = [
+    "choice", 
+    "reward", 
+    "block",
+    "prior",
+    "wheel-speed", 
+    "whisker-motion-energy",
+]
+
+POSE_BEH_NAMES = [
+    "lightning-pose-left-pawL-speed",
+    "lightning-pose-right-pawL-speed",
+    "lightning-pose-left-pawR-speed",
+    "lightning-pose-right-pawR-speed",
+]
+
+
 def align_data(
     binned_spikes, 
     binned_behaviors, 
@@ -986,4 +975,243 @@ def align_data(
         target_mask, 
         bad_trial_idxs
     )
+
+
+def align_data_common(
+    binned_spikes, 
+    binned_behaviors, 
+    beh_names=None, 
+    trials_mask=None,
+    nan_thresh=0.3,
+):
+    """Align common data (neural + non-pose behaviors) without pose data.
     
+    This is used by download_common_data.py to align data without pose.
+    """
+    if beh_names is None:
+        beh_names = [k for k in binned_behaviors.keys() if k not in POSE_BEH_NAMES]
+    
+    num_trials = len(binned_spikes)
+    
+    target_mask = [1] * num_trials
+    beh_names_filtered = beh_names.copy()
+    
+    for beh in beh_names:
+        if beh not in binned_behaviors:
+            continue
+        beh_mask = [1 if x is not None else 0 for x in binned_behaviors[beh]]
+        nan_ratio = 1 - sum(beh_mask) / num_trials
+        print(f"{beh} has {nan_ratio*100.:.1f}% NaN trials.")
+        if nan_ratio >= nan_thresh:
+            if beh in beh_names_filtered:
+                beh_names_filtered.remove(beh)
+            print(f"Remove {beh} due to too many NaN trials!")
+        else:
+            target_mask = target_mask and beh_mask
+
+    if trials_mask is not None:
+        trials_mask = list(trials_mask.to_numpy().astype(int))
+        target_mask = target_mask and trials_mask
+
+    bad_trial_idxs = np.argwhere(np.array(target_mask) == 0)
+
+    aligned_binned_spikes = np.delete(binned_spikes, bad_trial_idxs, axis=0)
+
+    num_trials = len(aligned_binned_spikes)
+    aligned_binned_behaviors = {}
+    
+    for beh in beh_names_filtered:
+        if beh not in binned_behaviors:
+            continue
+        aligned_binned_behaviors[beh] = np.delete(binned_behaviors[beh], bad_trial_idxs, axis=0)
+        aligned_binned_behaviors[beh] = np.array(
+            [y for y in aligned_binned_behaviors[beh]], 
+            dtype=float
+        ).reshape((num_trials, -1))
+        
+        if beh in DYNAMIC_VARS:
+            top = aligned_binned_behaviors[beh] - np.min(aligned_binned_behaviors[beh])
+            bottom = np.max(aligned_binned_behaviors[beh]) - np.min(aligned_binned_behaviors[beh])
+            if bottom != 0:
+                aligned_binned_behaviors[beh] = top / bottom
+            else:
+                aligned_binned_behaviors[beh] = np.zeros_like(aligned_binned_behaviors[beh])
+    
+    return (
+        aligned_binned_spikes, 
+        aligned_binned_behaviors,
+        None,  # No LFP
+        target_mask, 
+        bad_trial_idxs
+    )
+
+
+def prepare_data_without_pose(one, eid, params, n_workers=os.cpu_count()):
+    """Prepare neural and behavioral data WITHOUT loading pose data.
+    
+    This is used by download_common_data.py to download common data only.
+    """
+    pids, probe_names = one.eid2pid(eid) 
+    details = one.get_details(eid)
+    print(f"Merge {len(probe_names)} probes for session EID: {eid}")
+
+    clusters_list = []
+    spikes_list = []
+    for pid, probe_name in zip(pids, probe_names):
+        tmp_spikes, tmp_clusters, sampling_freq = load_spiking_data(
+            one, pid, eid=eid, pname=probe_name
+        )
+        if tmp_spikes is None:
+            return None, None, None, None, None
+        tmp_clusters["pid"] = pid
+        spikes_list.append(tmp_spikes)
+        clusters_list.append(tmp_clusters)
+    spikes, clusters = merge_probes(spikes_list, clusters_list)
+
+    _, good_trials_mask = load_trials_and_mask(one=one, eid=eid)
+
+    trials_df, trials_mask = load_trials_and_mask(
+        one=one, eid=eid, min_rt=0., max_rt=10., 
+    )
+    
+    # Load non-pose behaviors only
+    behave_dict = load_anytime_behaviors_no_pose(one, eid, n_workers=n_workers)
+    
+    neural_dict = {
+        "spike_times": spikes["times"],
+        "spike_clusters": spikes["clusters"],
+        "cluster_regions": clusters["acronym"].to_numpy(),
+    }
+        
+    meta_data = {
+        "eid": eid,
+        "subject": details["subject"],
+        "lab": details["lab"],
+        "sampling_freq": sampling_freq,
+        "cluster_channels": list(clusters["channels"]),
+        "cluster_regions": list(clusters["acronym"]),
+        "good_clusters": list((clusters["label"] >= 1).astype(int)),
+        "cluster_depths": list(clusters["depths"]),
+        "uuids": list(clusters["uuids"]),
+    }
+
+    trials_data = {
+        "trials_df": trials_df,
+        "trials_mask": trials_mask
+    }
+    return neural_dict, behave_dict, meta_data, trials_data, good_trials_mask
+
+
+def load_anytime_behaviors_no_pose(one, eid, n_workers=os.cpu_count()):
+    """Load behaviors WITHOUT pose data (for common data download)."""
+    behaviors = [
+        "wheel-speed",
+        "left-whisker-motion-energy", 
+        "right-whisker-motion-energy",
+        "body-motion-energy",
+    ]
+    
+    @globalize
+    def load_beh(beh):
+        return beh, load_target_behavior(one, eid, beh)
+    
+    behave_dict = {}
+    with multiprocessing.Pool(processes=n_workers) as p:
+        with tqdm(total=len(behaviors)) as pbar:
+            for res in p.imap_unordered(load_beh, behaviors):
+                pbar.update()
+                behave_dict.update({res[0]: res[1]})
+        pbar.close()
+        p.close()
+    return behave_dict
+
+
+def load_pose_data_for_model(one, eid, target, pose_model_path):
+    """Load pose data from a specific model path.
+    
+    This function is used by process_pose_data.py to load pose data
+    from a specific model directory.
+    
+    Args:
+        one: ONE API object
+        eid: Session ID
+        target: Target behavior name (e.g., "lightning-pose-right-pawR-speed")
+        pose_model_path: Path to the pose model predictions directory
+        
+    Returns:
+        dict with keys: 'times', 'values', 'skip'
+    """
+    try:
+        if target == "lightning-pose-right-pawR-speed":
+            return _load_lightning_pose_speed_from_csv(one, eid, "rightCamera", "pawR", pose_model_path)
+        elif target == "lightning-pose-left-pawR-speed":
+            return _load_lightning_pose_speed_from_csv(one, eid, "leftCamera", "pawR", pose_model_path)
+        elif target == "lightning-pose-right-pawL-speed":
+            return _load_lightning_pose_speed_from_csv(one, eid, "rightCamera", "pawL", pose_model_path)
+        elif target == "lightning-pose-left-pawL-speed":
+            return _load_lightning_pose_speed_from_csv(one, eid, "leftCamera", "pawL", pose_model_path)
+        elif target == "lightning-pose-right-pawR-x":
+            return _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawR", "x", pose_model_path)
+        elif target == "lightning-pose-right-pawR-y":
+            return _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawR", "y", pose_model_path)
+        elif target == "lightning-pose-left-pawR-x":
+            return _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawR", "x", pose_model_path)
+        elif target == "lightning-pose-left-pawR-y":
+            return _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawR", "y", pose_model_path)
+        elif target == "lightning-pose-right-pawL-x":
+            return _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawL", "x", pose_model_path)
+        elif target == "lightning-pose-right-pawL-y":
+            return _load_lightning_pose_from_csv(one, eid, "rightCamera", "pawL", "y", pose_model_path)
+        elif target == "lightning-pose-left-pawL-x":
+            return _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawL", "x", pose_model_path)
+        elif target == "lightning-pose-left-pawL-y":
+            return _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawL", "y", pose_model_path)
+        else:
+            print(f"Unknown pose target: {target}")
+            return {"times": None, "values": None, "skip": True}
+    except Exception as e:
+        print(f"Error loading pose data for {target}: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"times": None, "values": None, "skip": True}
+
+
+def load_pose_time_window(one, eid, pose_model_path):
+    """Load pose data time window from a model path.
+    
+    This is used to filter trials to only those within the pose data time range,
+    ensuring consistency with the original workflow.
+    
+    Args:
+        one: ONE API object
+        eid: Session ID
+        pose_model_path: Path to pose model predictions directory
+        
+    Returns:
+        tuple: (pose_time_start, pose_time_end) or (None, None) if unavailable
+    """
+    try:
+        # Try to load any pose data to get the time window
+        pose_dict = _load_lightning_pose_speed_from_csv(
+            one, eid, "rightCamera", "pawR", pose_model_path
+        )
+        
+        if pose_dict["skip"] or pose_dict["times"] is None:
+            # Try left camera
+            pose_dict = _load_lightning_pose_speed_from_csv(
+                one, eid, "leftCamera", "pawR", pose_model_path
+            )
+        
+        if pose_dict["skip"] or pose_dict["times"] is None:
+            print("Warning: Could not load pose data to determine time window")
+            return None, None
+        
+        pose_times = pose_dict["times"]
+        pose_time_start = pose_times[0]
+        pose_time_end = pose_times[-1]
+        
+        return pose_time_start, pose_time_end
+        
+    except Exception as e:
+        print(f"Error loading pose time window: {e}")
+        return None, None
