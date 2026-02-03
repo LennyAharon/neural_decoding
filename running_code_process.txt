@@ -5,25 +5,38 @@
 # step 3: Decoding single session
 
 python src/download_common_data.py \
-    --eid 5c0c560e-9e1f-45e9-b66e-e4ee7855be84 \
+    --eid 15b69921-d471-4ded-8814-2adad954bcd8 \
     --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
-    --pose_model_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_MVT_dlc_patch_masking/multiview_transformer_200_0/videos_new
+    --pose_model_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_multiview_resnet50/supervised_200_0/videos_new
 
 
 python src/process_pose_data.py \
-    --eid 5c0c560e-9e1f-45e9-b66e-e4ee7855be84 \
+    --eid aad23144-0e52-4eac-80c5-c4ee2decb198 \
     --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
     --pose_model_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/test_200_multiview_resnet50/supervised_200_0/videos_new \
     --model_name resnet50_0
 
-
-python src/decode_single_session.py \
-    --eid 5c0c560e-9e1f-45e9-b66e-e4ee7855be84 \
-    --target lightning-pose-right-pawR-speed \
+CV decoding 
+python src/decode_single_session_cv.py \
+    --eid aad23144-0e52-4eac-80c5-c4ee2decb198 \
+    --target lightning-pose-pawL-3d-speed \
     --method linear \
     --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
     --model_name resnet50_0 \
-    --region all
+    --region all \
+    --search
+
+
+CV decoding for 3D speed 
+python src/decode_single_session_cv.py \
+    --eid 15b69921-d471-4ded-8814-2adad954bcd8 \
+    --target lightning-pose-pawR-3d-speed \
+    --method linear \
+    --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
+    --model_name resnet50_median \
+    --region all \
+    --search
+
 
 '''
 
@@ -32,6 +45,9 @@ python src/decode_single_session.py \
 #     '15763234-d21e-491f-a01b-1238eb96d389',  # dark
 #     'aad23144-0e52-4eac-80c5-c4ee2decb198',  # wire by tongue
 #     '9b528ad0-4599-4a55-9148-96cc1d93fb24',  # vertical bright band left
+      '4b00df29-3769-43be-bb40-128b1cba6d35', # has something with mergin 2 probes 
+      '0841d188-8ef2-4f20-9828-76a94d5343a4', # 2 probes 
+      'f312aaec-3b6f-44b3-86b4-3a0c119c0438'
 #     '5c0c560e-9e1f-45e9-b66e-e4ee7855be84',  # vertical bright band left, bright spot right, back paws
 # ]
 
@@ -46,4 +62,27 @@ python src/decode_single_session.py \
     --target wheel-speed \
     --method linear \
     --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
+    --region all
+
+
+
+
+CV decoding 
+python src/decode_single_session_cv.py \
+    --eid 15b69921-d471-4ded-8814-2adad954bcd8 \
+    --target lightning-pose-left-pawL-speed \
+    --method reduced_rank \
+    --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
+    --model_name MVT_patch_masking_median \
+    --region all \
+    --search
+
+
+# Old decoding not CV
+python src/decode_single_session.py \
+    --eid 15b69921-d471-4ded-8814-2adad954bcd8 \
+    --target lightning-pose-left-pawL-speed \
+    --method linear \
+    --base_path /media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity \
+    --model_name resnet50_median \
     --region all

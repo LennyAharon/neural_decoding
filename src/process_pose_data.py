@@ -52,7 +52,9 @@ POSE_BEH_NAMES = [
     'lightning-pose-right-pawR-speed', 
     'lightning-pose-left-pawR-speed',
     'lightning-pose-right-pawL-speed', 
-    'lightning-pose-left-pawL-speed'
+    'lightning-pose-left-pawL-speed',
+    'lightning-pose-pawR-3d-speed',
+    'lightning-pose-pawL-3d-speed'
 ]
 
 DYNAMIC_VARS = POSE_BEH_NAMES  # All pose behaviors are dynamic
@@ -88,6 +90,27 @@ trial_intervals = alignment_info["trial_intervals"]  # Shape: (n_trials, 2)
 
 print(f"Loaded alignment info: {alignment_info['num_aligned_trials']} aligned trials")
 
+# Load frame timestamps to calculate original video indices
+# Both left and right cameras share the same timestamps file structure
+timestamp_file = Path(args.base_path) / "timestamps" / f"_ibl_leftCamera.times.{args.eid}.npy"
+if not timestamp_file.exists():
+    # Try alternative location if not in timestamps/
+    timestamp_file = Path(args.base_path) / f"_ibl_leftCamera.times.{args.eid}.npy"
+
+if timestamp_file.exists():
+    print(f"Loading frame timestamps from {timestamp_file}")
+    frame_times = np.load(timestamp_file)
+    # Calculate frame indices for each trial
+    idxs_beg = np.searchsorted(frame_times, trial_intervals[:, 0], side="right")
+    idxs_end = np.searchsorted(frame_times, trial_intervals[:, 1], side="left")
+    all_trial_frame_indices = np.c_[idxs_beg, idx_end]
+else:
+    print(f"WARNING: Frame timestamps not found at {timestamp_file}. Frame indices will not be available.")
+    all_trial_frame_indices = None
+
+# Original trial indices (before removing bad trials)
+all_original_trial_indices = np.arange(len(trial_intervals))
+
 # Load and bin pose data for this specific model
 pose_binned = {}
 pose_masks = {}
@@ -121,8 +144,50 @@ for pose_beh in POSE_BEH_NAMES:
     pose_binned[pose_beh] = np.array(target_vals_list, dtype=object)
     pose_masks[pose_beh] = target_mask
     
+    # Also process ensemble variances if they exist
+    for var_name in ["x_ens_var", "y_ens_var", "x_coords", "y_coords"]:
+        if pose_dict.get(var_name) is not None:
+            _, var_vals_list, _, _ = get_behavior_per_interval(
+                target_times, 
+                pose_dict[var_name], 
+                intervals=trial_intervals, 
+                trials_df=None, 
+                allow_nans=True, 
+                n_workers=args.n_workers, 
+                **params
+            )
+            pose_binned[f"{pose_beh}_{var_name}"] = np.array(var_vals_list, dtype=object)
+    
     valid_count = sum(1 for x in target_vals_list if x is not None)
     print(f"  {pose_beh}: {valid_count}/{len(target_vals_list)} valid trials")
+
+# Process 3D Triangulation for each paw
+for paw in ["pawR", "pawL"]:
+    print(f"Processing 3D triangulation for {paw}...")
+    pose_3d_dict = load_pose_data_for_model(
+        one, args.eid, f"lightning-pose-{paw}-3d", args.pose_model_path
+    )
+    
+    if pose_3d_dict["skip"]:
+        print(f"  Skipping 3D for {paw} - data or aniposelib not available")
+        continue
+    
+    target_times = pose_3d_dict["times"]
+    for coord in ["x_3d", "y_3d", "z_3d"]:
+        target_vals = pose_3d_dict[coord]
+        
+        # Apply same binning as common data
+        _, var_vals_list, _, _ = get_behavior_per_interval(
+            target_times, 
+            target_vals, 
+            intervals=trial_intervals, 
+            trials_df=None, 
+            allow_nans=True, 
+            n_workers=args.n_workers, 
+            **params
+        )
+        pose_binned[f"lightning-pose-{paw}-{coord}"] = np.array(var_vals_list, dtype=object)
+    print(f"  {paw} 3D coordinates binned")
 
 if len(pose_binned) == 0:
     print(f"ERROR: No pose data available for session {args.eid}")
@@ -144,20 +209,39 @@ for beh in pose_binned.keys():
     ).reshape((num_trials, -1))
     
     # Normalize (same as align_data does for dynamic vars)
-    data = aligned_pose_binned[beh]
-    valid_mask = ~np.isnan(data)
-    if valid_mask.any():
-        data_min = np.nanmin(data)
-        data_max = np.nanmax(data)
-        if data_max != data_min:
-            aligned_pose_binned[beh] = (data - data_min) / (data_max - data_min)
-        else:
-            aligned_pose_binned[beh] = np.zeros_like(data)
+    # Only normalize original behaviors (speed), not ensemble variances
+    # Note: We are DISABLING normalization for POSE_BEH_NAMES to allow physical comparison
+    if beh in POSE_BEH_NAMES:
+        pass # Keep original pixels/sec units
+    
+    # if beh in POSE_BEH_NAMES:
+    #     data = aligned_pose_binned[beh]
+    #     valid_mask = ~np.isnan(data)
+    #     if valid_mask.any():
+    #         data_min = np.nanmin(data)
+    #         data_max = np.nanmax(data)
+    #         if data_max != data_min:
+    #             aligned_pose_binned[beh] = (data - data_min) / (data_max - data_min)
+    #         else:
+    #             aligned_pose_binned[beh] = np.zeros_like(data)
 
 print(f"Aligned pose data: {num_trials} trials")
 
 # Split into train/val/test using the same indices as common data
 train_pose, val_pose, test_pose = {}, {}, {}
+
+# Add trial mapping info
+aligned_original_trial_indices = np.delete(all_original_trial_indices, bad_trial_idxs)
+train_pose["original_trial_indices"] = aligned_original_trial_indices[train_idxs]
+val_pose["original_trial_indices"] = aligned_original_trial_indices[val_idxs]
+test_pose["original_trial_indices"] = aligned_original_trial_indices[test_idxs]
+
+if all_trial_frame_indices is not None:
+    aligned_trial_frame_indices = np.delete(all_trial_frame_indices, bad_trial_idxs, axis=0)
+    train_pose["trial_frame_indices"] = aligned_trial_frame_indices[train_idxs]
+    val_pose["trial_frame_indices"] = aligned_trial_frame_indices[val_idxs]
+    test_pose["trial_frame_indices"] = aligned_trial_frame_indices[test_idxs]
+
 for beh in aligned_pose_binned.keys():
     train_pose[beh] = aligned_pose_binned[beh][train_idxs]
     val_pose[beh] = aligned_pose_binned[beh][val_idxs]

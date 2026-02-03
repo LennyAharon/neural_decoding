@@ -14,6 +14,12 @@ from brainbox.io.one import SpikeSortingLoader, SessionLoader
 from iblatlas.regions import BrainRegions
 from brainbox.population.decode import get_spike_counts_in_bins
 
+try:
+    from aniposelib.cameras import CameraGroup
+    ANIPOSE_AVAILABLE = True
+except ImportError:
+    ANIPOSE_AVAILABLE = False
+
 DYNAMIC_VARS = [
     "wheel-speed", "whisker-motion-energy", "body-motion-energy", 
     "lightning-pose-right-pawR-speed",
@@ -322,7 +328,6 @@ def _load_lightning_pose_from_csv(one, eid, camera_view, paw_name, coord, base_p
         idx = pd.IndexSlice
         paw_df = df.loc[:, idx[:, paw_name, coord]]
         paw = paw_df.iloc[:, 0].to_numpy()
-        
         # Truncate to match timestamp length if needed
         if len(paw) > min_len:
             paw = paw[:min_len]
@@ -381,6 +386,29 @@ def _load_lightning_pose_speed_from_csv(one, eid, camera_view, paw_name, base_pa
         
         x_times, x_vals = x_dict["times"], x_dict["values"]
         y_times, y_vals = y_dict["times"], y_dict["values"]
+
+        # Extract ensemble variances directly from CSV
+        try:
+            pred_file = os.path.join(base_path, f"_iblrig_{camera_view}.downsampled.{eid}.csv")
+            df = pd.read_csv(pred_file, header=[0,1,2], index_col=0)
+            idx = pd.IndexSlice
+            
+            x_var_df = df.loc[:, idx[:, paw_name, "x_ens_var"]]
+            x_ens_var = x_var_df.iloc[:, 0].to_numpy()
+            y_var_df = df.loc[:, idx[:, paw_name, "y_ens_var"]]  
+            y_ens_var = y_var_df.iloc[:, 0].to_numpy()
+            
+            # Truncate to match coordinate data length
+            min_len = len(x_times)
+            if len(x_ens_var) > min_len:
+                x_ens_var = x_ens_var[:min_len]
+                y_ens_var = y_ens_var[:min_len]
+                
+            print(f"Loaded ensemble variances for {camera_view}-{paw_name}")
+        except (KeyError, FileNotFoundError):
+            print(f"Warning: ensemble variances not found for {camera_view}-{paw_name}")
+            x_ens_var = y_ens_var = None
+
         
         # Ensure both have same length and times
         if len(x_vals) != len(y_vals) or not np.allclose(x_times, y_times):
@@ -401,9 +429,23 @@ def _load_lightning_pose_speed_from_csv(one, eid, camera_view, paw_name, base_pa
         # Use MIDPOINT of time intervals for better alignment
         speed_times = (x_times[:-1] + x_times[1:]) / 2
         
+        # Align ensemble variances to speed midpoints if they exist
+        if x_ens_var is not None:
+            x_ens_var = (x_ens_var[:-1] + x_ens_var[1:]) / 2
+        if y_ens_var is not None:
+            y_ens_var = (y_ens_var[:-1] + y_ens_var[1:]) / 2
+            
+        # Align coordinates to speed midpoints
+        x_coords = (x_vals[:-1] + x_vals[1:]) / 2
+        y_coords = (y_vals[:-1] + y_vals[1:]) / 2
+        
         return {
             "times": speed_times,  # Midpoint of each interval
             "values": speeds,
+            "x_ens_var": x_ens_var,
+            "y_ens_var": y_ens_var,
+            "x_coords": x_coords,
+            "y_coords": y_coords,
             "skip": False,
         }
     except Exception as e:
@@ -905,6 +947,8 @@ POSE_BEH_NAMES = [
     "lightning-pose-right-pawL-speed",
     "lightning-pose-left-pawR-speed",
     "lightning-pose-right-pawR-speed",
+    "lightning-pose-pawL-3d-speed",
+    "lightning-pose-pawR-3d-speed",
 ]
 
 
@@ -924,6 +968,8 @@ def align_data(
         "lightning-pose-right-pawL-speed",
         "lightning-pose-left-pawR-speed",
         "lightning-pose-right-pawR-speed",
+        "lightning-pose-pawL-3d-speed",
+        "lightning-pose-pawR-3d-speed",
     ], 
     trials_mask=None,
     nan_thresh=0.3,
@@ -964,10 +1010,14 @@ def align_data(
         aligned_binned_behaviors[beh] = np.array([y for y in aligned_binned_behaviors[beh]], 
             dtype=float).reshape((num_trials, -1)
         )
-        if beh in DYNAMIC_VARS:
+        # Normalize dynamic vars (but skip for lightning pose to keep pixels/sec)
+        if beh in DYNAMIC_VARS and "lightning-pose" not in beh:
             top = aligned_binned_behaviors[beh] - np.min(aligned_binned_behaviors[beh])
             bottom = np.max(aligned_binned_behaviors[beh]) - np.min(aligned_binned_behaviors[beh])
-            aligned_binned_behaviors[beh] = top / bottom
+            if bottom != 0:
+                aligned_binned_behaviors[beh] = top / bottom
+            else:
+                aligned_binned_behaviors[beh] = np.zeros_like(aligned_binned_behaviors[beh])
     return (
         aligned_binned_spikes, 
         aligned_binned_behaviors,
@@ -1029,7 +1079,7 @@ def align_data_common(
             dtype=float
         ).reshape((num_trials, -1))
         
-        if beh in DYNAMIC_VARS:
+        if beh in DYNAMIC_VARS and "lightning-pose" not in beh:
             top = aligned_binned_behaviors[beh] - np.min(aligned_binned_behaviors[beh])
             bottom = np.max(aligned_binned_behaviors[beh]) - np.min(aligned_binned_behaviors[beh])
             if bottom != 0:
@@ -1166,6 +1216,17 @@ def load_pose_data_for_model(one, eid, target, pose_model_path):
             return _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawL", "x", pose_model_path)
         elif target == "lightning-pose-left-pawL-y":
             return _load_lightning_pose_from_csv(one, eid, "leftCamera", "pawL", "y", pose_model_path)
+        
+        # 3D Triangulation targets
+        elif target == "lightning-pose-pawR-3d":
+            return load_lightning_pose_3d(one, eid, "pawR", pose_model_path)
+        elif target == "lightning-pose-pawL-3d":
+            return load_lightning_pose_3d(one, eid, "pawL", pose_model_path)
+        elif target == "lightning-pose-pawR-3d-speed":
+            return load_lightning_pose_3d_speed(one, eid, "pawR", pose_model_path)
+        elif target == "lightning-pose-pawL-3d-speed":
+            return load_lightning_pose_3d_speed(one, eid, "pawL", pose_model_path)
+            
         else:
             print(f"Unknown pose target: {target}")
             return {"times": None, "values": None, "skip": True}
@@ -1173,6 +1234,134 @@ def load_pose_data_for_model(one, eid, target, pose_model_path):
         print(f"Error loading pose data for {target}: {e}")
         import traceback
         traceback.print_exc()
+        return {"times": None, "values": None, "skip": True}
+
+
+def load_lightning_pose_3d(one, eid, paw_name, pose_model_path):
+    """
+    Load 2D pose data from both cameras and triangulate to 3D using aniposelib.
+    
+    Parameters:
+    -----------
+    one : ONE object
+    eid : str
+        Session ID
+    paw_name : str
+        "pawL" or "pawR"
+    pose_model_path : str
+        Path to pose model predictions directory
+        
+    Returns:
+    --------
+    dict with keys: 'times', 'x_3d', 'y_3d', 'z_3d', 'skip'
+    """
+    if not ANIPOSE_AVAILABLE:
+        print("Error: aniposelib not installed. Please install with: pip install aniposelib")
+        return {"times": None, "skip": True}
+
+    try:
+        # 1. Calibration file path
+        calibration_dir = "/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_pose/calibrations"
+        calibration_file = Path(calibration_dir) / f"_iblrig.downsampled.{eid}.toml"
+        
+        if not calibration_file.exists():
+            print(f"Error: Calibration file not found at {calibration_file}")
+            return {"times": None, "skip": True}
+
+        # 2. Load 2D data from both cameras
+        # leftCamera
+        left_x = _load_lightning_pose_from_csv(one, eid, "leftCamera", paw_name, "x", pose_model_path)
+        left_y = _load_lightning_pose_from_csv(one, eid, "leftCamera", paw_name, "y", pose_model_path)
+        # rightCamera
+        right_x = _load_lightning_pose_from_csv(one, eid, "rightCamera", paw_name, "x", pose_model_path)
+        right_y = _load_lightning_pose_from_csv(one, eid, "rightCamera", paw_name, "y", pose_model_path)
+
+        if any(d["skip"] for d in [left_x, left_y, right_x, right_y]):
+            print(f"Error: Missing 2D data for 3D triangulation of {paw_name}")
+            return {"times": None, "skip": True}
+
+        # Use left camera times as base (they are shared via loader anyway)
+        times = left_x["times"]
+        n_frames = len(times)
+
+        # 3. Prepare 2D data for aniposelib
+        # Shape: (n_cams, n_frames, n_kpts, 2)
+        data_2d = np.zeros((2, n_frames, 1, 2))
+        data_2d[0, :, 0, 0] = left_x["values"]
+        data_2d[0, :, 0, 1] = left_y["values"]
+        data_2d[1, :, 0, 0] = right_x["values"]
+        data_2d[1, :, 0, 1] = right_y["values"]
+
+        # 4. Triangulate
+        print(f"Triangulating 3D position for {paw_name} using {calibration_file.name}")
+        camgroup = CameraGroup.load(str(calibration_file))
+        # triangulate expects (n_cams, n_frames, 2) for a single point
+        points_3d = camgroup.triangulate(data_2d[:, :, 0, :], fast=True) # Shape: (n_frames, 3)
+
+        return {
+            "times": times,
+            "x_3d": points_3d[:, 0],
+            "y_3d": points_3d[:, 1],
+            "z_3d": points_3d[:, 2],
+            "skip": False
+        }
+    except Exception as e:
+        print(f"Error during 3D triangulation for {paw_name}: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"times": None, "skip": True}
+
+
+def load_lightning_pose_3d_speed(one, eid, paw_name, pose_model_path):
+    """
+    Compute 3D speed from triangulated 3D positions.
+    
+    Parameters:
+    -----------
+    one : ONE object
+    eid : str
+    paw_name : str
+    pose_model_path : str
+        
+    Returns:
+    --------
+    dict with keys: 'times', 'values', 'skip'
+    """
+    try:
+        # Load 3D coordinates
+        d_3d = load_lightning_pose_3d(one, eid, paw_name, pose_model_path)
+        if d_3d["skip"]:
+            return {"times": None, "values": None, "skip": True}
+        
+        times = d_3d["times"]
+        x, y, z = d_3d["x_3d"], d_3d["y_3d"], d_3d["z_3d"]
+        
+        # Compute differences
+        dx = x[1:] - x[:-1]
+        dy = y[1:] - y[:-1]
+        dz = z[1:] - z[:-1]
+        dt = times[1:] - times[:-1]
+        
+        # Filter out zero dt to avoid division by zero
+        valid_dt = dt > 0
+        
+        # Euclidean distance in 3D
+        dist_3d = np.sqrt(dx**2 + dy**2 + dz**2)
+        
+        # 3D speed
+        speeds_3d = dist_3d[valid_dt] / dt[valid_dt]
+        
+        # Speed times are midpoints
+        speed_times = (times[:-1] + times[1:]) / 2
+        speed_times = speed_times[valid_dt]
+        
+        return {
+            "times": speed_times,
+            "values": speeds_3d,
+            "skip": False
+        }
+    except Exception as e:
+        print(f"Error computing 3D speed for {paw_name}: {e}")
         return {"times": None, "values": None, "skip": True}
 
 

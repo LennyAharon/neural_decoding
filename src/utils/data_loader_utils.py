@@ -20,6 +20,8 @@ POSE_BEH_NAMES = [
     "lightning-pose-right-pawL-speed",
     "lightning-pose-left-pawR-speed",
     "lightning-pose-right-pawR-speed",
+    "lightning-pose-pawL-3d-speed",
+    "lightning-pose-pawR-3d-speed",
 ]
 
 # ---------
@@ -119,6 +121,49 @@ class SingleSessionDataset(Dataset):
                 self.behavior = self._load_behavior(
                     dataset, split, beh_name, data_dir, eid, pose_model_name
                 )
+            
+            # Load ensemble variances if available
+            self.ens_vars = {}
+            self.trial_frame_indices = None
+            self.original_trial_indices = None
+            
+            if pose_model_name is not None and beh_name in POSE_BEH_NAMES:
+                pose_dir = Path(data_dir).parent / "pose_aligned" / pose_model_name / eid
+                pose_file = pose_dir / f"{split}_pose.npy"
+                if pose_file.exists():
+                    pose_data = np.load(pose_file, allow_pickle=True).item()
+                    
+                    # Load trial and frame mapping
+                    if "trial_frame_indices" in pose_data:
+                        self.trial_frame_indices = pose_data["trial_frame_indices"]
+                    if "original_trial_indices" in pose_data:
+                        self.original_trial_indices = pose_data["original_trial_indices"]
+                    
+                    # 2D Variances and Coords (camera-specific)
+                    if "3d-speed" in beh_name:
+                        # For 3D targets, load both camera views (left and right)
+                        paw_name = "pawR" if "pawR" in beh_name else "pawL"
+                        for view in ["left", "right"]:
+                            # Construct the 2D behavior name that was used during processing
+                            ref_beh_name = f"lightning-pose-{view}-{paw_name}-speed"
+                            for var_type in ["x_ens_var", "y_ens_var", "x_coords", "y_coords"]:
+                                key = f"{ref_beh_name}_{var_type}"
+                                if key in pose_data:
+                                    self.ens_vars[f"{view}_{var_type}"] = pose_data[key]
+                    else:
+                        # For 2D targets, load just that specific camera view
+                        for var_type in ["x_ens_var", "y_ens_var", "x_coords", "y_coords"]:
+                            key = f"{beh_name}_{var_type}"
+                            if key in pose_data:
+                                self.ens_vars[var_type] = pose_data[key]
+                            
+                    # 3D Coordinates (paw-specific, triangulated from both cameras)
+                    paw_name = "pawR" if "pawR" in beh_name else "pawL" if "pawL" in beh_name else None
+                    if paw_name:
+                        for coord in ["x_3d", "y_3d", "z_3d"]:
+                            key = f"lightning-pose-{paw_name}-{coord}"
+                            if key in pose_data:
+                                self.ens_vars[coord] = pose_data[key]
 
             _, means, stds = standardize_spike_data(get_binned_spikes(dataset["train"]))
             self.spike_data, _, _ = standardize_spike_data(self.spike_data, means, stds)
@@ -143,6 +188,12 @@ class SingleSessionDataset(Dataset):
                     
                     self.spike_data = self.spike_data[valid_mask]
                     self.behavior = self.behavior[valid_mask]
+                    for k in self.ens_vars:
+                        self.ens_vars[k] = self.ens_vars[k][valid_mask]
+                    if self.trial_frame_indices is not None:
+                        self.trial_frame_indices = self.trial_frame_indices[valid_mask]
+                    if self.original_trial_indices is not None:
+                        self.original_trial_indices = self.original_trial_indices[valid_mask]
             
             self.sessions = np.array([eid] * len(self.spike_data))
             self.neuron_regions = np.array(dataset[split]["cluster_regions"])[0]
