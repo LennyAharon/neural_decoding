@@ -16,14 +16,14 @@ N_WORKERS=4
 
 # List of EIDs to process
 EIDS=(
-    # "aad23144-0e52-4eac-80c5-c4ee2decb198"
-    # "15b69921-d471-4ded-8814-2adad954bcd8"
-    # "15763234-d21e-491f-a01b-1238eb96d389"
-    # "9b528ad0-4599-4a55-9148-96cc1d93fb24"
-    # "4b00df29-3769-43be-bb40-128b1cba6d35"
-    # "0841d188-8ef2-4f20-9828-76a94d5343a4"
-    # "f312aaec-3b6f-44b3-86b4-3a0c119c0438"
-    # "5c0c560e-9e1f-45e9-b66e-e4ee7855be84"
+    "aad23144-0e52-4eac-80c5-c4ee2decb198"
+    "15b69921-d471-4ded-8814-2adad954bcd8"
+    "15763234-d21e-491f-a01b-1238eb96d389"
+    "9b528ad0-4599-4a55-9148-96cc1d93fb24"
+    "4b00df29-3769-43be-bb40-128b1cba6d35"
+    "0841d188-8ef2-4f20-9828-76a94d5343a4"
+    "f312aaec-3b6f-44b3-86b4-3a0c119c0438"
+    "5c0c560e-9e1f-45e9-b66e-e4ee7855be84"
 
     "0f77ca5d-73c2-45bd-aa4c-4c5ed275dbde"
     "1b715600-0cbc-442c-bd00-5b0ac2865de1"
@@ -64,10 +64,14 @@ POSE_MODELS=(
     # "test_200_MVT_3d_aug_patch_masking/multiview_transformer_200_2|MVT_3d_aug_patch_2"
     # "test_200_MVT_3d_aug_patch_masking/ensemble_median|MVT_3d_aug_patch_median"
     # "test_200_MVT_3d_aug_patch_masking_new/ensemble_median|MVT_3d_aug_patch_median_new"
-    "test_200_MVT_3d_aug_patch_masking_new/eks_multiview_linear|MVT_3d_aug_patch_eks_linear_new"
+    # "test_200_MVT_3d_aug_patch_masking_new/eks_multiview_linear|MVT_3d_aug_patch_eks_linear_new"
     # "test_200_MVT_3d_aug_patch_masking/eks_multiview|MVT_3d_aug_patch_eks"
     # "test_200_MVT_3d_aug_patch_masking/eks_multiview_linear|MVT_3d_aug_patch_eks_linear"
     # "test_400_MVT_3d_aug_patch_masking/ensemble_median|MVT_3d_aug_patch_median_400"
+    # "test_200_MVT_3d_loss_patch_new/ensemble_median|MVT_3d_loss_patch_median_new"
+
+    "test_200_multiview_resnet50/ensemble_median|resnet50_median_2"
+    # "test_200_MVT_3d_aug_patch_masking/ensemble_median|MVT_3d_aug_patch_median_2"
 )
 
 # =============================================================================

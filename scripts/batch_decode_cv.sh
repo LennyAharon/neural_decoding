@@ -14,14 +14,14 @@ BASE_PATH="/media/lenny-aharon/T7/ibl-mouse/ibl-mouse_neural-activity"
 
 # List of EIDs to process
 EIDS=(
-    # "aad23144-0e52-4eac-80c5-c4ee2decb198"
-    # "15b69921-d471-4ded-8814-2adad954bcd8"
-    # "15763234-d21e-491f-a01b-1238eb96d389"
-    # "9b528ad0-4599-4a55-9148-96cc1d93fb24"
-    # "4b00df29-3769-43be-bb40-128b1cba6d35"
-    # "0841d188-8ef2-4f20-9828-76a94d5343a4"
-    # "f312aaec-3b6f-44b3-86b4-3a0c119c0438"
-    # "5c0c560e-9e1f-45e9-b66e-e4ee7855be84"
+    "aad23144-0e52-4eac-80c5-c4ee2decb198"
+    "15b69921-d471-4ded-8814-2adad954bcd8"
+    "15763234-d21e-491f-a01b-1238eb96d389"
+    "9b528ad0-4599-4a55-9148-96cc1d93fb24"
+    "4b00df29-3769-43be-bb40-128b1cba6d35"
+    "0841d188-8ef2-4f20-9828-76a94d5343a4"
+    "f312aaec-3b6f-44b3-86b4-3a0c119c0438"
+    "5c0c560e-9e1f-45e9-b66e-e4ee7855be84"
 
     "3e6a97d3-3991-49e2-b346-6948cb4580fb"
     "3f859b5c-e73a-4044-b49e-34bb81e96715"
@@ -51,7 +51,7 @@ EIDS=(
 # Targets to decode
 TARGETS=(
     "lightning-pose-pawL-3d-speed"
-    "lightning-pose-pawR-3d-speed"
+    # "lightning-pose-pawR-3d-speed"
     # "lightning-pose-left-pawL-speed"
     # "lightning-pose-right-pawL-speed"
     # "lightning-pose-right-pawR-speed"
@@ -74,8 +74,11 @@ MODEL_NAMES=(
     # "MVT_3d_aug_patch_median_new"
     # "MVT_3d_aug_patch_eks"
     # "MVT_3d_aug_patch_eks_linear"
-    "MVT_3d_aug_patch_eks_linear_new"
+    # "MVT_3d_aug_patch_eks_linear_new"
+    # "MVT_3d_loss_patch_median_new"
     # "MVT_3d_aug_patch_median_400"
+    "MVT_3d_aug_patch_median_2"
+    # "resnet50_median_2"
 )
 
 # Decoding options
