@@ -50,8 +50,8 @@ EIDS=(
 
 # Targets to decode
 TARGETS=(
-    "lightning-pose-pawL-3d-speed"
-    # "lightning-pose-pawR-3d-speed"
+    # "lightning-pose-pawL-3d-speed"
+    "lightning-pose-pawR-3d-speed"
     # "lightning-pose-left-pawL-speed"
     # "lightning-pose-right-pawL-speed"
     # "lightning-pose-right-pawR-speed"
@@ -77,8 +77,7 @@ MODEL_NAMES=(
     # "MVT_3d_aug_patch_eks_linear_new"
     # "MVT_3d_loss_patch_median_new"
     # "MVT_3d_aug_patch_median_400"
-    "MVT_3d_aug_patch_median_2"
-    # "resnet50_median_2"
+    "resnet50_anipose_new"
 )
 
 # Decoding options

@@ -59,6 +59,7 @@ POSE_MODELS=(
     # "test_200_multiview_resnet50/ensemble_median|resnet50_median"
     # "test_200_multiview_resnet50/eks_multiview_linear|resnet50_eks_linear"
     # "test_200_multiview_resnet50_new/ensemble_median|resnet50_median_new"
+    "test_200_multiview_resnet50_new/anipose|resnet50_anipose_new"
     # "test_200_MVT_3d_aug_patch_masking/multiview_transformer_200_0|MVT_3d_aug_patch_0"
     # "test_200_MVT_3d_aug_patch_masking/multiview_transformer_200_1|MVT_3d_aug_patch_1"
     # "test_200_MVT_3d_aug_patch_masking/multiview_transformer_200_2|MVT_3d_aug_patch_2"
@@ -70,7 +71,7 @@ POSE_MODELS=(
     # "test_400_MVT_3d_aug_patch_masking/ensemble_median|MVT_3d_aug_patch_median_400"
     # "test_200_MVT_3d_loss_patch_new/ensemble_median|MVT_3d_loss_patch_median_new"
 
-    "test_200_multiview_resnet50/ensemble_median|resnet50_median_2"
+    # "test_200_multiview_resnet50/ensemble_median|resnet50_median_2"
     # "test_200_MVT_3d_aug_patch_masking/ensemble_median|MVT_3d_aug_patch_median_2"
 )
 
