@@ -787,6 +787,7 @@ res_dict = {
     "overall_metric": overall_metric,
     "fold_results": fold_results,
     "n_trials": n_trials,
+    "n_units": metadata["n_units"],
     "config": {
         "target": args.target,
         "method": args.method,

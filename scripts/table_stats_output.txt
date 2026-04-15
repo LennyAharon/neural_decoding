@@ -1,0 +1,9 @@
+TARGET: lightning-pose-pawL-3d-speed
+  resnet50_median_new: TC=0.160+/-0.011  R2=0.185+/-0.013  RMSE=1.15+/-0.13  (n=39)
+  MVT_3d_aug_patch_median_new: TC=0.168+/-0.010  R2=0.208+/-0.012  RMSE=1.10+/-0.15  (n=39)
+  MVT_3d_aug_patch_eks_linear_new: TC=0.188+/-0.011  R2=0.260+/-0.015  RMSE=0.64+/-0.08  (n=39)
+
+TARGET: lightning-pose-pawR-3d-speed
+  resnet50_median_new: TC=0.174+/-0.011  R2=0.209+/-0.012  RMSE=1.07+/-0.12  (n=39)
+  MVT_3d_aug_patch_median_new: TC=0.182+/-0.011  R2=0.216+/-0.011  RMSE=0.92+/-0.10  (n=39)
+  MVT_3d_aug_patch_eks_linear_new: TC=0.199+/-0.012  R2=0.287+/-0.013  RMSE=0.61+/-0.07  (n=39)
